@@ -1,5 +1,7 @@
+from concurrent import futures
 import sys
 import threading
+import argparse
 import grpc
 import objectstore_pb2 as pb
 import objectstore_pb2_grpc as pb_grpc
@@ -9,6 +11,27 @@ MAX_KEY_LEN = 128
 MAX_VAL_SZ = 1048576
 
 EMPTY = empty_pb2.Empty()
+
+def parse_cluster(cluster_arg):
+    endpoints = sorted(e.lower().strip() for e in cluster_arg.split(","))
+    return endpoints[0], endpoints
+
+def valid_endpoints(endpoints):
+    for endpoint in endpoints:
+        parts = endpoint.split(':')
+        if len(parts) != 2:
+            print(f"ERROR: endpoint must have exactly 1 \":\" that splits host and port; {endpoint}")
+            return False
+        
+        host, port = parts
+        if not host:
+            print(f"ERROR: host must have 1 or more characters; {endpoint}")
+            return False
+        if not port.isdigit() or not (1 <= int(port) <= 65535):
+            print(f"ERROR: port must be an integer between 1 and 65535 (inclusive); {endpoint}")
+            return False
+        
+    return True
 
 def make_stub(endpoint):
     channel = grpc.insecure_channel(endpoint)
@@ -161,3 +184,38 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unknown WriteOpType: {request.type}")
                 
         return EMPTY
+    
+def serve(listen_addr, primary_addr, all_endpoints):
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
+    servicer = ObjectStoreServicer(listen_addr, primary_addr, all_endpoints)
+    pb_grpc.add_ObjectStoreServicer_to_server(servicer, server)
+    server.add_insecure_port(listen_addr)
+    server.start()
+    print(f"Server listening on {listen_addr}", file=sys.stderr)
+    try:
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        print("\nShutting down.", file=sys.stderr)
+        server.stop(0)
+    
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--listen", required=True, help="host:port this instance binds to")
+    parser.add_argument("--cluster", required=True, help="Comma-separated list of all host:port endpoints in the cluster")
+    args = parser.parse_args()
+    
+    primary, all_endpoints = parse_cluster(args.cluster)
+    listen_addr = args.listen.lower().strip()
+ 
+    if listen_addr not in all_endpoints:
+        print(f"ERROR: --listen address '{listen_addr}' is not in --cluster list", file=sys.stderr)
+        sys.exit(1)
+        
+    all_endpoints_valid, listen_addr_valid = valid_endpoints(all_endpoints), valid_endpoints(list(listen_addr))
+    if not all_endpoints_valid or not listen_addr_valid:
+        sys.exit(1)
+ 
+    serve(listen_addr, primary, all_endpoints)
+    
+if __name__ == "__main__":
+    main()
