@@ -58,14 +58,13 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Value exceeds maximum size of {MAX_VAL_SZ} bytes")
 
     def Put(self, request, context):
-        """Client-facing RPCs"""
         self._validate_key(request.key, context)
         self._validate_value(request.value, context)
  
         with self.lock:
             if request.key in self.store:
-                context.abort(grpc.StatusCode.ALREADY_EXISTS,
-                              f"Key '{request.key}' already exists")
+                context.abort(grpc.StatusCode.ALREADY_EXISTS, f"Key '{request.key}' already exists")
+                
             self.store[request.key] = request.value
             self.counter_puts += 1
  
@@ -73,24 +72,92 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
         return EMPTY
 
     def Get(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        self._validate_key(request.key, context)
+ 
+        with self.lock:
+            if request.key not in self.store:
+                context.abort(grpc.StatusCode.NOT_FOUND, f"Key '{request.key}' not found")
+                
+            value = self.store[request.key]
+            self.counter_gets += 1
+ 
+        return pb.GetResponse(value=value)
 
     def Delete(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        self._require_primary(context)
+        self._validate_key(request.key, context)
+ 
+        with self.lock:
+            if request.key not in self.store:
+                context.abort(grpc.StatusCode.NOT_FOUND, f"Key '{request.key}' not found")
+            del self.store[request.key]
+            self.counter_deletes += 1
+ 
+        # self._replicate(pb.WriteOp(type=pb.DELETE, key=request.key))
+        return EMPTY
 
     def Update(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        self._validate_key(request.key, context)
+        self._validate_value(request.value, context)
+ 
+        with self.lock:
+            if request.key not in self.store:
+                context.abort(grpc.StatusCode.NOT_FOUND, f"Key '{request.key}' not found")
+                
+            self.store[request.key] = request.value
+            self.counter_updates += 1
+ 
+        # self._replicate(pb.WriteOp(type=pb.UPDATE, key=request.key, value=request.value))
+        return EMPTY
 
     def List(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        with self.lock:
+            entries = [
+                pb.ListEntry(key=k, size_bytes=len(v))
+                for k, v in self.store.items()
+            ]
+        return pb.ListResponse(entries=entries)
 
     def Reset(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        with self.lock:
+            self.store.clear()
+            self.counter_puts = 0
+            self.counter_gets = 0
+            self.counter_deletes = 0
+            self.counter_updates = 0
+ 
+        # self._replicate(pb.WriteOp(type=pb.RESET))
+        return EMPTY
 
     def Stats(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        with self.lock:
+            return pb.StatsResponse(
+                live_objects=len(self.store),
+                total_bytes=sum(len(v) for v in self.store.values()),
+                puts=self.counter_puts,
+                gets=self.counter_gets,
+                deletes=self.counter_deletes,
+                updates=self.counter_updates,
+            )
 
     def ApplyWrite(self, request, context):
         """Intra-cluster RPC: primary -> replicas only.
         Clients must never call this directly.
         """
+        with self.lock:
+            if request.type == pb.PUT:
+                self.store[request.key] = request.value
+            elif request.type == pb.DELETE:
+                self.store.pop(request.key, None)
+            elif request.type == pb.UPDATE:
+                self.store[request.key] = request.value
+            elif request.type == pb.RESET:
+                self.store.clear()
+                self.counter_puts = 0
+                self.counter_gets = 0
+                self.counter_deletes = 0
+                self.counter_updates = 0
+            else:
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Unknown WriteOpType: {request.type}")
+                
+        return EMPTY
