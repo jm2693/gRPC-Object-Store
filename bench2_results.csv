@@ -1,0 +1,4 @@
+config,cluster,total_ops,ops_per_sec,p50_ms,p95_ms,p99_ms
+1-node,cheese.cs.rutgers.edu:50051,364134,12137.8,0.61,0.97,1.14
+2-node,cheese.cs.rutgers.edu:50051,batch.cs.rutgers.edu:50051,206833,6894.4,1.12,1.59,2.06
+3-node,cheese.cs.rutgers.edu:50051,batch.cs.rutgers.edu:50051,cpp.cs.rutgers.edu:50051,152181,5072.7,1.50,2.14,3.12
