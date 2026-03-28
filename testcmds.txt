@@ -1,0 +1,57 @@
+# every CLI operation and error path
+# Usage: python cli.py --cluster localhost:50051 < testcmds.txt
+#
+# Start clean
+reset
+
+# Basic put + get
+put greeting hello
+get greeting
+
+# Put duplicate key -> ALREADY_EXISTS 
+put greeting again
+
+# Get missing key -> NOT_FOUND 
+get noexist
+
+# Update existing key 
+update greeting world
+get greeting
+
+# Update missing key -> NOT_FOUND 
+update noexist value
+
+# Add a second key, then list 
+put counter 42
+list
+
+# Stats should show: 2 live objects, 2 puts, 2 gets, 0 deletes, 1 update 
+stats
+
+# Delete existing key 
+delete counter
+
+# Delete missing key -> NOT_FOUND 
+delete counter
+
+# List after delete (only 'greeting' remains) 
+list
+
+# Case sensitivity: Photo vs photo 
+put Photo UPPER
+put photo lower
+get Photo
+get photo
+
+# Key validation: spaces not allowed 
+put bad key value
+
+# Final stats 
+stats
+
+# Reset clears everything 
+reset
+list
+stats
+
+quit

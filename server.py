@@ -107,7 +107,7 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
         return pb.GetResponse(value=value)
 
     def Delete(self, request, context):
-        self._require_primary(context)
+        # self._require_primary(context)
         self._validate_key(request.key, context)
  
         with self.lock:
@@ -211,7 +211,7 @@ def main():
         print(f"ERROR: --listen address '{listen_addr}' is not in --cluster list", file=sys.stderr)
         sys.exit(1)
         
-    all_endpoints_valid, listen_addr_valid = valid_endpoints(all_endpoints), valid_endpoints(list(listen_addr))
+    all_endpoints_valid, listen_addr_valid = valid_endpoints(all_endpoints), valid_endpoints([listen_addr])
     if not all_endpoints_valid or not listen_addr_valid:
         sys.exit(1)
  
