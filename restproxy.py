@@ -158,8 +158,11 @@ class ObjectStoreHandler(BaseHTTPRequestHandler):
         application/octet-stream and HTTP 200.
         On error, call self._send_grpc_error(e).
         """
-        # TODO: implement this method.
-        pass
+        try:
+            resp = self._read_stub().Get(pb.GetRequest(key=key))
+            self._send(200, "application/octet-stream", resp.value)
+        except grpc.RpcError as e:
+            self._send_grpc_error(e)
 
     def _handle_list(self):
         """
@@ -171,8 +174,13 @@ class ObjectStoreHandler(BaseHTTPRequestHandler):
         Example response body:
             [{"key": "foo", "size_bytes": 12}, {"key": "bar", "size_bytes": 4}]
         """
-        # TODO: implement this method.
-        pass
+        try:
+            resp = self._read_stub().List(empty_pb2.Empty())
+            entries = [{"key": e.key, "size_bytes": e.size_bytes}
+                       for e in resp.entries]
+            self._send_json(200, entries)
+        except grpc.RpcError as e:
+            self._send_grpc_error(e)
 
     def _handle_stats(self):
         """
@@ -184,8 +192,18 @@ class ObjectStoreHandler(BaseHTTPRequestHandler):
         Example response body:
             {"live_objects": 3, "total_bytes": 128, "puts": 5, ...}
         """
-        # TODO: implement this method.
-        pass
+        try:
+            resp = self._read_stub().Stats(empty_pb2.Empty())
+            self._send_json(200, {
+                "live_objects": resp.live_objects,
+                "total_bytes":  resp.total_bytes,
+                "puts":         resp.puts,
+                "gets":         resp.gets,
+                "deletes":      resp.deletes,
+                "updates":      resp.updates,
+            })
+        except grpc.RpcError as e:
+            self._send_grpc_error(e)
 
     # ------------------------------------------------------------------
     # PUT /objects/<key>   -- store a new object
@@ -241,8 +259,12 @@ class ObjectStoreHandler(BaseHTTPRequestHandler):
         On success, send HTTP 200 with body b"OK".
         On error, call self._send_grpc_error(e).
         """
-        # TODO: implement this method.
-        pass
+        value = self._read_body()
+        try:
+            self.server.primary_stub.Update(pb.UpdateRequest(key=key, value=value))
+            self._send(200, "text/plain", b"OK")
+        except grpc.RpcError as e:
+            self._send_grpc_error(e)
 
     # ------------------------------------------------------------------
     # DELETE /objects/<key>  -- delete a single object
@@ -267,16 +289,22 @@ class ObjectStoreHandler(BaseHTTPRequestHandler):
         On success, send HTTP 200 with body b"OK".
         On error, call self._send_grpc_error(e).
         """
-        # TODO: implement this method.
-        pass
+        try:
+            self.server.primary_stub.Delete(pb.DeleteRequest(key=key))
+            self._send(200, "text/plain", b"OK")
+        except grpc.RpcError as e:
+            self._send_grpc_error(e)
 
     def _handle_reset(self):
         """
         Call Reset() on the primary.
         Always returns HTTP 200 with body b"OK".
         """
-        # TODO: implement this method.
-        pass
+        try:
+            self.server.primary_stub.Reset(empty_pb2.Empty())
+            self._send(200, "text/plain", b"OK")
+        except grpc.RpcError as e:
+            self._send_grpc_error(e)
 
 
 # ---------------------------------------------------------------------------
