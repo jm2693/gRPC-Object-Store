@@ -37,7 +37,7 @@ def run_workers(cluster, num_workers, duration, value_size):
             "--worker-id", str(i),
             "--output", outfile,
         ]
-        p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         procs.append((p, outfile))
 
     for p, _ in procs:
