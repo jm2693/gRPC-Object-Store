@@ -6,6 +6,10 @@ import sys
 import tempfile
 import time
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+WORKER_SCRIPT = os.path.join(SCRIPT_DIR, "bench_worker.py")
+
+sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
 
 CONCURRENCY_LEVELS = [1, 2, 4, 8, 16, 32]
 DURATION = 30         
