@@ -43,8 +43,8 @@ put photo lower
 get Photo
 get photo
 
-# Key validation: spaces not allowed 
-put bad key value
+# Key validation: too long (129 chars)
+put aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa toolong
 
 # Final stats 
 stats

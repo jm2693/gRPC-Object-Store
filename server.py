@@ -46,22 +46,21 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
         self.listen_addr = listen_addr
         self.primary_addr = primary_addr
         self.is_primary = (listen_addr == primary_addr)
+        
+        self.cluster_size = len(all_endpoints)
+        self.majority = self.cluster_size // 2 + 1
  
-        # for later replica stuff
-        # self.replica_stubs = []
-        # if self.is_primary:
-        #     for ep in all_endpoints:
-        #         if ep != listen_addr:
-        #             self.replica_stubs.append(make_stub(ep))
+        self.replica_stubs = []
+        if self.is_primary:
+            for ep in all_endpoints:
+                if ep != listen_addr:
+                    self.replica_stubs.append(make_stub(ep))
  
         self.counter_puts = 0
         self.counter_gets = 0
         self.counter_deletes = 0
         self.counter_updates = 0
         
-    def _replicate(self, op):
-        """Send a WriteOp to every replica. Primary committed already"""
-        pass
     
     def _validate_key(self, key, context):
         """INVALID_ARGUMENT if the key goes against any constraint."""
@@ -79,8 +78,26 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
         """INVALID_ARGUMENT if value exceeds size limit."""
         if len(value) > MAX_VAL_SZ:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Value exceeds maximum size of {MAX_VAL_SZ} bytes")
+            
+    def _replicate(self, op):
+        """Send a WriteOp to every replica. Primary committed already"""
+        acknowledgments = 0
+        for stub in self.replica_stubs:
+            try:
+                stub.ApplyWrite(op)
+                acknowledgments += 1
+            except grpc.RpcError as e:
+                print(f"ERROR: Failed to replicate to a replica: {e.details()}", file=sys.stderr)
+                
+        return acknowledgments
+            
+    def _require_primary(self, context):
+        """Replicas must reject any client write with FAILED_PRECONDITION."""
+        if not self.is_primary:
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "This node is a replica. Send writes to the primary")
 
     def Put(self, request, context):
+        self._require_primary(context)
         self._validate_key(request.key, context)
         self._validate_value(request.value, context)
  
@@ -91,7 +108,12 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
             self.store[request.key] = request.value
             self.counter_puts += 1
  
-        # self._replicate(pb.WriteOp(type=pb.PUT, key=request.key, value=request.value))
+        replica_acks = self._replicate(pb.WriteOp(type=pb.PUT, key=request.key, value=request.value))
+        total_acks = 1 + replica_acks
+ 
+        if total_acks < self.majority:
+            context.abort(grpc.StatusCode.UNAVAILABLE, "Failed to reach majority; write not committed")
+            
         return EMPTY
 
     def Get(self, request, context):
@@ -107,7 +129,7 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
         return pb.GetResponse(value=value)
 
     def Delete(self, request, context):
-        # self._require_primary(context)
+        self._require_primary(context)
         self._validate_key(request.key, context)
  
         with self.lock:
@@ -116,10 +138,16 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
             del self.store[request.key]
             self.counter_deletes += 1
  
-        # self._replicate(pb.WriteOp(type=pb.DELETE, key=request.key))
+        replica_acks = self._replicate(pb.WriteOp(type=pb.DELETE, key=request.key))
+        total_acks = 1 + replica_acks
+ 
+        if total_acks < self.majority:
+            context.abort(grpc.StatusCode.UNAVAILABLE, "Failed to reach majority; write may not be committed")
+            
         return EMPTY
 
     def Update(self, request, context):
+        self._require_primary(context)
         self._validate_key(request.key, context)
         self._validate_value(request.value, context)
  
@@ -130,7 +158,12 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
             self.store[request.key] = request.value
             self.counter_updates += 1
  
-        # self._replicate(pb.WriteOp(type=pb.UPDATE, key=request.key, value=request.value))
+        replica_acks = self._replicate(pb.WriteOp(type=pb.UPDATE, key=request.key, value=request.value))
+        total_acks = 1 + replica_acks
+ 
+        if total_acks < self.majority:
+            context.abort(grpc.StatusCode.UNAVAILABLE, "Failed to reach majority; write may not be committed")
+ 
         return EMPTY
 
     def List(self, request, context):
@@ -142,6 +175,8 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
         return pb.ListResponse(entries=entries)
 
     def Reset(self, request, context):
+        self._require_primary(context)
+        
         with self.lock:
             self.store.clear()
             self.counter_puts = 0
@@ -149,7 +184,12 @@ class ObjectStoreServicer(pb_grpc.ObjectStoreServicer):
             self.counter_deletes = 0
             self.counter_updates = 0
  
-        # self._replicate(pb.WriteOp(type=pb.RESET))
+        replica_acks = self._replicate(pb.WriteOp(type=pb.RESET))
+        total_acks = 1 + replica_acks
+ 
+        if total_acks < self.majority:
+            context.abort(grpc.StatusCode.UNAVAILABLE, "Failed to reach majority; write may not be committed")
+            
         return EMPTY
 
     def Stats(self, request, context):
@@ -195,7 +235,7 @@ def serve(listen_addr, primary_addr, all_endpoints):
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:
-        print("\nShutting down.", file=sys.stderr)
+        print("\nServer shutting down.", file=sys.stderr)
         server.stop(0)
     
 def main():
