@@ -23,7 +23,7 @@ def run_workers(cluster, operation, num_workers, duration, value_size):
     for i in range(num_workers):
         outfile = os.path.join(tmpdir, f"worker_{i}.txt")
         cmd = [
-            sys.executable, "bench_worker.py",
+            sys.executable, WORKER_SCRIPT,
             "--cluster", cluster,
             "--operation", operation,
             "--duration", str(duration),
