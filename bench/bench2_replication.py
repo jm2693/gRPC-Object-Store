@@ -6,6 +6,10 @@ import sys
 import tempfile
 import time
 
+import grpc
+import objectstore_pb2_grpc as pb_grpc
+from google.protobuf import empty_pb2
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKER_SCRIPT = os.path.join(SCRIPT_DIR, "bench_worker.py")
 
@@ -70,9 +74,6 @@ def run_workers(cluster, num_workers, duration, value_size):
 
 def reset_server(cluster):
     try:
-        import grpc
-        import objectstore_pb2_grpc as pb_grpc
-        from google.protobuf import empty_pb2
         endpoints = sorted(e.lower().strip() for e in cluster.split(","))
         primary = endpoints[0]
         channel = grpc.insecure_channel(primary)
@@ -126,7 +127,7 @@ def main():
     with open(csv_file, "w") as f:
         f.write("config,cluster,total_ops,ops_per_sec,p50_ms,p95_ms,p99_ms\n")
         for config_name, cluster, total, ops_s, p50, p95, p99 in results:
-            f.write(f"{config_name},{cluster},{total},{ops_s:.1f},"
+            f.write(f'{config_name},"{cluster}",{total},{ops_s:.1f},'
                     f"{p50*1000:.2f},{p95*1000:.2f},{p99*1000:.2f}\n")
 
     print(f"\nResults saved to {csv_file}")

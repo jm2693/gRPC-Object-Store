@@ -70,8 +70,7 @@ def worker(stub, thread_id, result):
 
 def main():
     parser = argparse.ArgumentParser(description="Concurrent correctness test")
-    parser.add_argument("--cluster", required=True,
-                        help="Comma-separated list of host:port endpoints")
+    parser.add_argument("--cluster", required=True, help="Comma-separated list of host:port endpoints")
     args = parser.parse_args()
 
     primary, all_endpoints = parse_cluster(args.cluster)

@@ -6,6 +6,11 @@ import sys
 import tempfile
 import time
 
+import grpc
+import objectstore_pb2 as pb
+import objectstore_pb2_grpc as pb_grpc
+from google.protobuf import empty_pb2
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKER_SCRIPT = os.path.join(SCRIPT_DIR, "bench_worker.py")
 
@@ -64,10 +69,6 @@ def run_workers(cluster, operation, num_workers, duration, value_size):
 
 def reset_server(cluster):
     try:
-        import grpc
-        import objectstore_pb2 as pb
-        import objectstore_pb2_grpc as pb_grpc
-        from google.protobuf import empty_pb2
         endpoints = sorted(e.lower().strip() for e in cluster.split(","))
         primary = endpoints[0]
         channel = grpc.insecure_channel(primary)

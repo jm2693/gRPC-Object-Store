@@ -783,14 +783,14 @@ def phase2_cluster():
         lambda: primary.Put(pb.PutRequest(key="state", value=b"NJ"))
     )
     check_code(
-        "update 'city' with no majority -> UNAVAILABLE",
+        "update 'county' with no majority -> UNAVAILABLE",
         grpc.StatusCode.UNAVAILABLE,
-        lambda: primary.Update(pb.UpdateRequest(key="city", value=b"Princeton"))
+        lambda: primary.Update(pb.UpdateRequest(key="county", value=b"Monmouth"))
     )
     check_code(
-        "delete 'city' with no majority -> UNAVAILABLE",
+        "delete 'county' with no majority -> UNAVAILABLE",
         grpc.StatusCode.UNAVAILABLE,
-        lambda: primary.Delete(pb.DeleteRequest(key="city"))
+        lambda: primary.Delete(pb.DeleteRequest(key="county"))
     )
 
     info("Reads from the primary should still succeed (reads do not require majority)...")
